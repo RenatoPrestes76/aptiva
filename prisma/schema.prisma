@@ -1,0 +1,396 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  CANDIDATE
+  COMPANY
+  ADMIN
+}
+
+enum JobStatus {
+  DRAFT
+  PUBLISHED
+  PAUSED
+  CLOSED
+}
+
+enum ApplicationStatus {
+  PENDING
+  REVIEWING
+  INTERVIEW
+  OFFER
+  HIRED
+  REJECTED
+}
+
+enum TestType {
+  BEHAVIORAL
+  EXECUTION
+  CREATIVITY
+  REASONING
+  ATTENTION
+}
+
+enum InterviewStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ProfileType {
+  EXECUTOR
+  ANALYST
+  CREATOR
+  LEADER
+  STRATEGIST
+  COMMUNICATOR
+  INVESTIGATOR
+  TECHNICAL_SPECIALIST
+}
+
+// ─── Core User ────────────────────────────────────────────────────────────────
+
+model User {
+  id            String   @id @default(cuid())
+  supabaseId    String   @unique
+  email         String   @unique
+  name          String
+  role          UserRole @default(CANDIDATE)
+  avatar        String?
+  publicSlug    String?  @unique
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  candidate     CandidateProfile?
+  company       CompanyProfile?
+  adminProfile  AdminProfile?
+
+  @@map("users")
+}
+
+// ─── Candidate ────────────────────────────────────────────────────────────────
+
+model CandidateProfile {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  headline          String?
+  bio               String?
+  location          String?
+  phone             String?
+  linkedinUrl       String?
+  githubUrl         String?
+  portfolioUrl      String?
+  resumeUrl         String?
+
+  desiredSalaryMin  Float?
+  desiredSalaryMax  Float?
+  availableFrom     DateTime?
+  remotePreference  Boolean   @default(false)
+
+  primaryProfile    ProfileType?
+  secondaryProfile  ProfileType?
+
+  scoreLeadership       Float @default(0)
+  scoreOrganization     Float @default(0)
+  scoreCommunication    Float @default(0)
+  scoreCreativity       Float @default(0)
+  scoreExecution        Float @default(0)
+  scoreCollaboration    Float @default(0)
+  scoreResilience       Float @default(0)
+  scoreAdaptability     Float @default(0)
+  overallScore          Float @default(0)
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  experiences       Experience[]
+  educations        Education[]
+  skills            CandidateSkill[]
+  certifications    Certification[]
+  portfolioItems    PortfolioItem[]
+  testResults       TestResult[]
+  interviews        Interview[]
+  applications      Application[]
+
+  @@map("candidate_profiles")
+}
+
+model Experience {
+  id            String           @id @default(cuid())
+  candidateId   String
+  candidate     CandidateProfile @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  company       String
+  role          String
+  description   String?
+  startDate     DateTime
+  endDate       DateTime?
+  current       Boolean          @default(false)
+  createdAt     DateTime         @default(now())
+
+  @@map("experiences")
+}
+
+model Education {
+  id            String           @id @default(cuid())
+  candidateId   String
+  candidate     CandidateProfile @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  institution   String
+  degree        String
+  field         String?
+  startYear     Int
+  endYear       Int?
+  current       Boolean          @default(false)
+  createdAt     DateTime         @default(now())
+
+  @@map("educations")
+}
+
+model Skill {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  category    String?
+  candidates  CandidateSkill[]
+  jobSkills   JobSkill[]
+
+  @@map("skills")
+}
+
+model CandidateSkill {
+  id          String           @id @default(cuid())
+  candidateId String
+  candidate   CandidateProfile @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  skillId     String
+  skill       Skill            @relation(fields: [skillId], references: [id])
+  level       Int              @default(3)
+  yearsExp    Float?
+
+  @@unique([candidateId, skillId])
+  @@map("candidate_skills")
+}
+
+model Certification {
+  id            String           @id @default(cuid())
+  candidateId   String
+  candidate     CandidateProfile @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  name          String
+  issuer        String
+  issueDate     DateTime?
+  expiryDate    DateTime?
+  credentialUrl String?
+  createdAt     DateTime         @default(now())
+
+  @@map("certifications")
+}
+
+model PortfolioItem {
+  id            String           @id @default(cuid())
+  candidateId   String
+  candidate     CandidateProfile @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  title         String
+  description   String?
+  url           String?
+  imageUrl      String?
+  techStack     String[]
+  createdAt     DateTime         @default(now())
+
+  @@map("portfolio_items")
+}
+
+// ─── Company ──────────────────────────────────────────────────────────────────
+
+model CompanyProfile {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  companyName   String
+  cnpj          String?  @unique
+  industry      String?
+  size          String?
+  website       String?
+  logoUrl       String?
+  description   String?
+  location      String?
+  phone         String?
+
+  plan          String   @default("free")
+  planExpiresAt DateTime?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  jobs          Job[]
+  savedCandidates SavedCandidate[]
+
+  @@map("company_profiles")
+}
+
+// ─── Jobs ─────────────────────────────────────────────────────────────────────
+
+model Job {
+  id              String         @id @default(cuid())
+  companyId       String
+  company         CompanyProfile @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  title           String
+  description     String
+  requirements    String?
+  benefits        String?
+  location        String?
+  remote          Boolean        @default(false)
+  salaryMin       Float?
+  salaryMax       Float?
+  contractType    String?
+  experienceLevel String?
+  status          JobStatus      @default(DRAFT)
+
+  reqLeadership       Float @default(0)
+  reqOrganization     Float @default(0)
+  reqCommunication    Float @default(0)
+  reqCreativity       Float @default(0)
+  reqExecution        Float @default(0)
+  reqCollaboration    Float @default(0)
+  reqResilience       Float @default(0)
+  reqAdaptability     Float @default(0)
+
+  desiredProfile  ProfileType?
+  closesAt        DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  skills          JobSkill[]
+  applications    Application[]
+
+  @@map("jobs")
+}
+
+model JobSkill {
+  id        String  @id @default(cuid())
+  jobId     String
+  job       Job     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  skillId   String
+  skill     Skill   @relation(fields: [skillId], references: [id])
+  required  Boolean @default(true)
+
+  @@unique([jobId, skillId])
+  @@map("job_skills")
+}
+
+model Application {
+  id          String            @id @default(cuid())
+  jobId       String
+  job         Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  candidateId String
+  candidate   CandidateProfile  @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  status      ApplicationStatus @default(PENDING)
+  matchScore  Float             @default(0)
+  coverLetter String?
+  notes       String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@unique([jobId, candidateId])
+  @@map("applications")
+}
+
+model SavedCandidate {
+  id          String         @id @default(cuid())
+  companyId   String
+  company     CompanyProfile @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  candidateId String
+  notes       String?
+  createdAt   DateTime       @default(now())
+
+  @@unique([companyId, candidateId])
+  @@map("saved_candidates")
+}
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
+model TestResult {
+  id          String           @id @default(cuid())
+  candidateId String
+  candidate   CandidateProfile @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  testType    TestType
+  score       Float
+  rawData     Json?
+  aiAnalysis  String?
+  completedAt DateTime         @default(now())
+
+  @@map("test_results")
+}
+
+// ─── Interview ────────────────────────────────────────────────────────────────
+
+model Interview {
+  id              String           @id @default(cuid())
+  candidateId     String
+  candidate       CandidateProfile @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  status          InterviewStatus  @default(PENDING)
+  jobId           String?
+
+  scoreClarity        Float?
+  scoreCommunication  Float?
+  scoreObjectivity    Float?
+  scoreLeadership     Float?
+  scoreConfidence     Float?
+  scoreTechnical      Float?
+  overallScore        Float?
+  aiReport            String?
+
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime         @default(now())
+
+  messages        InterviewMessage[]
+
+  @@map("interviews")
+}
+
+model InterviewMessage {
+  id          String    @id @default(cuid())
+  interviewId String
+  interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  role        String
+  content     String
+  createdAt   DateTime  @default(now())
+
+  @@map("interview_messages")
+}
+
+// ─── Admin ────────────────────────────────────────────────────────────────────
+
+model AdminProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  level     Int      @default(1)
+  createdAt DateTime @default(now())
+
+  @@map("admin_profiles")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  entity    String?
+  entityId  String?
+  metadata  Json?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@map("audit_logs")
+}
