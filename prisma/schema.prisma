@@ -74,6 +74,7 @@ model User {
   candidate     CandidateProfile?
   company       CompanyProfile?
   adminProfile  AdminProfile?
+  tenantMembers TenantMember[]
 
   @@map("users")
 }
@@ -294,6 +295,7 @@ model Application {
   job         Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
   candidateId String
   candidate   CandidateProfile  @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  tenantId    String?           // denormalizado para RLS multi-tenant
   status      ApplicationStatus @default(PENDING)
   matchScore  Float             @default(0)
   coverLetter String?
@@ -302,6 +304,7 @@ model Application {
   updatedAt   DateTime          @updatedAt
 
   @@unique([jobId, candidateId])
+  @@index([tenantId])
   @@map("applications")
 }
 
@@ -393,4 +396,49 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   @@map("audit_logs")
+}
+
+// ─── Multi-tenant ─────────────────────────────────────────────
+
+model Tenant {
+  id          String   @id
+  companyName String
+  plan        String   @default("free")
+  isActive    Boolean  @default(true)
+  maxJobs     Int      @default(3)
+  maxUsers    Int      @default(5)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members     TenantMember[]
+
+  @@map("tenants")
+}
+
+model TenantMember {
+  id         String    @id @default(cuid())
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       String    @default("recruiter")
+  invitedAt  DateTime  @default(now())
+  acceptedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@unique([tenantId, userId])
+  @@map("tenant_members")
+}
+
+model Plan {
+  id           String  @id
+  name         String  @unique
+  maxJobs      Int     @default(3)
+  maxUsers     Int     @default(2)
+  maxMonthly   Int     @default(50)
+  aiInterview  Boolean @default(false)
+  reports      Boolean @default(false)
+  price        Float   @default(0)
+
+  @@map("plans")
 }
